@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ecece7" />
+  <title>STILL LIFE — Time moves with you.</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./style.css" />
+  <script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
+</head>
+<body>
+  <canvas id="game" aria-label="Still Life 3D game arena"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+  <header><a class="wordmark" href="./">STILL LIFE<span class="brand-dot"></span></a><div class="edition">CO-OP SURVIVAL <span>/</span> VOL. 01</div><div class="platform"><span class="status-dot"></span> BUILT FOR QUEST 3</div></header>
+  <main id="menu">
+    <div class="intro"><div class="eyebrow"><span class="red-line"></span> A MOMENT BEFORE THE CHAOS</div>
+      <h1>MAKE<br>EVERY<br><span>MOVE</span> COUNT.</h1>
+      <p class="subtitle">Time moves with you.<br>Survive the apartment. Together.</p>
+      <div class="tags"><span>1–2 PLAYERS</span><span>VR + DESKTOP</span><span>ENDLESS WAVES</span></div>
+    </div>
+    <section class="session-panel" aria-label="Start a game">
+      <div class="panel-top"><span>01 / ENTER THE APARTMENT</span><span class="tiny-cross">+</span></div>
+      <label for="name">YOUR CALLSIGN</label><input id="name" maxlength="18" placeholder="Player" autocomplete="nickname" />
+      <button id="create" class="primary">CREATE A ROOM <span>↗</span></button>
+      <div class="divider"><span>OR JOIN YOUR PARTNER</span></div>
+      <form id="join-form"><label class="sr-only" for="room-code">Room code</label><input id="room-code" maxlength="5" placeholder="ROOM CODE" autocomplete="off" spellcheck="false" required pattern="[a-zA-Z2-9]{5}" /><button id="join" type="submit" aria-label="Join room">JOIN ↗</button></form>
+      <details><summary>Connection settings</summary><label for="server-url">MULTIPLAYER SERVER</label><input id="server-url" placeholder="Same server as this website" type="url" /><p>For a separately hosted game, enter your server’s HTTPS or WSS address.</p></details>
+      <p id="connection-message" role="status">Create a room to play solo or invite a friend.</p>
+    </section>
+    <div class="scene-caption"><span class="crosshair-mark">⌖</span><div>THE APARTMENT<span>EVERYTHING IS A WEAPON.</span></div><span class="caption-number">001</span></div>
+  </main>
+  <section id="lobby" class="hidden floating-panel" aria-label="Room lobby">
+    <div class="eyebrow">CONNECTION ESTABLISHED</div><h2>YOUR NEXT<br>MOVE STARTS HERE.</h2>
+    <div class="room-share"><div>ROOM CODE<strong id="lobby-code">—</strong></div><button id="copy" class="outline">COPY INVITE ↗</button></div>
+    <p id="roster">Waiting for players…</p><p class="muted">Your partner can join before or during a run.<br>Both players’ movement controls the same clock.</p>
+    <button id="start" class="primary">START THE WAVES <span>↗</span></button><button id="practice" class="outline full">EXPLORE / DESKTOP CONTROLS</button>
+    <div id="vr-slot"></div><p id="vr-note" class="muted">Checking VR availability…</p>
+    <button class="text-button leave">LEAVE ROOM</button>
+  </section>
+  <div id="hud" class="hidden">
+    <div class="hud-left"><div class="hud-label">ROOM <b id="hud-code"></b></div><div id="phase-label">GET READY</div><div id="health">● ● ●</div></div>
+    <div class="hud-center"><span>WORLD SPEED</span><div class="time-track"><i id="time-fill"></i></div><strong id="speed">04%</strong></div>
+    <div class="hud-right"><span>WAVE <b id="wave">00</b></span><span>SHATTERED <b id="kills">00</b></span><span id="ammo">HANDS FREE</span></div>
+    <div id="reticle" aria-hidden="true">+</div><div id="interaction"></div><div id="announcement" role="status"></div>
+    <div class="hud-bottom"><span>WASD MOVE · C CROUCH · E GRAB / DROP · Q THROW · CLICK FIRE</span><button id="room-menu">ROOM / ESC</button></div>
+  </div>
+  <section id="pause" class="hidden floating-panel"><div class="eyebrow">TAKE A BREATH</div><h2 id="pause-title">STILL IN<br>THE FIGHT.</h2><p id="pause-info">Your room stays connected.</p><button id="resume" class="primary">RESUME <span>↗</span></button><button id="restart" class="outline full hidden">PLAY AGAIN</button><button class="text-button leave">LEAVE ROOM</button></section>
+  <div id="toast" role="status"></div><div id="damage" aria-hidden="true"></div>
+  <footer id="footer"><span><b>01</b> GRAB ANYTHING</span><span><b>02</b> STAY STILL. THINK.</span><span><b>03</b> MOVE TOGETHER</span><button id="help-button">HOW TO PLAY ↗</button></footer>
+  <dialog id="help"><button id="close-help" aria-label="Close instructions">×</button><div class="eyebrow">A FEW RULES FOR SURVIVAL</div><h2>TIME IS<br>IN YOUR HANDS.</h2><p>Stay still to slow enemies and bullets. Move to speed up the world. In co-op, the more active player sets the pace.</p><div class="help-grid"><div><h3>QUEST 3</h3><p><b>Grip:</b> hold to grab, release to throw.<br><b>Trigger:</b> fire a held pistol.<br><b>Left stick:</b> move.<br><b>Right stick:</b> snap turn.<br><b>Trigger with empty hands:</b> start or restart between runs.</p></div><div><h3>DESKTOP</h3><p><b>WASD:</b> move. <b>Mouse:</b> aim.<br><b>E:</b> grab / drop nearby object.<br><b>Q:</b> throw forward.<br><b>Click:</b> fire. <b>Esc:</b> menu.<br><b>Enter:</b> start / restart.</p></div></div><p>Guns hold 8 shots. Throw empty guns, mugs, bottles, vases, or a frying pan. Swing held objects into enemies. Stations restock each wave; you recover one health. A downed partner returns next wave if you survive.</p><p class="muted">Play within your headset boundary. Stick movement is optional; physical dodging and turning work too.</p></dialog>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

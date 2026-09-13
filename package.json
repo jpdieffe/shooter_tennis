@@ -1,0 +1,27 @@
+{
+  "name": "still-life-vr",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A two-player, movement-driven WebXR wave survival game for Quest 3.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "build": "node scripts/build.js",
+    "test": "node --test test/*.test.js",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "three": "^0.185.0",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@fontsource/barlow-condensed": "^5.3.0",
+    "@fontsource/dm-mono": "^5.3.0",
+    "@fontsource/dm-sans": "^5.3.0",
+    "@playwright/test": "^1.58.0"
+  }
+}

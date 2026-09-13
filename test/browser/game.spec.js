@@ -1,0 +1,38 @@
+import { test, expect } from '@playwright/test';
+test('landing page, two-player room, wave start, and disconnect', async ({ page, browser }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/'); await expect(page.locator('h1')).toContainText('COUNT');
+  await page.waitForFunction(() => window.stillLife?.stats.triangles > 0);
+  await page.screenshot({ path: 'artifacts/landing.png', fullPage: true });
+  await page.locator('#name').fill('Alpha'); await page.locator('#create').click();
+  await expect(page.locator('#lobby')).toBeVisible(); const code = await page.locator('#lobby-code').textContent();
+  const context = await browser.newContext(), friend = await context.newPage();
+  friend.on('pageerror', e => errors.push(e.message));
+  await friend.goto('/'); await friend.locator('#name').fill('Bravo'); await friend.locator('#room-code').fill(code); await friend.locator('#join').click();
+  await expect(page.locator('#roster')).toContainText('2/2'); await expect(friend.locator('#roster')).toContainText('Alpha + Bravo');
+  await page.locator('#start').click();
+  await page.waitForFunction(() => window.stillLife.state.phase === 'playing', { timeout: 10000 });
+  await friend.waitForFunction(() => window.stillLife.state.phase === 'playing');
+  await page.keyboard.down('KeyW');
+  await page.waitForFunction(() => window.stillLife.state.players.find(p => p.id === window.stillLife.playerId).head.p[2] < 3.25);
+  await page.keyboard.up('KeyW'); await page.keyboard.press('KeyE');
+  await page.waitForFunction(() => window.stillLife.state.items.some(i => i.heldBy === window.stillLife.playerId && i.kind === 'pistol'));
+  await page.screenshot({ path: 'artifacts/gameplay.png' });
+  await page.mouse.click(720, 500);
+  await page.waitForFunction(() => window.stillLife.state.items.some(i => i.heldBy === window.stillLife.playerId && i.ammo === 7));
+  await page.keyboard.press('KeyQ');
+  await page.waitForFunction(() => window.stillLife.state.items.some(i => i.thrownBy === window.stillLife.playerId && !i.heldBy));
+  const shared = await friend.evaluate(() => ({ wave: window.stillLife.state.wave, enemies: window.stillLife.state.enemies.length }));
+  expect(shared.wave).toBe(1); expect(shared.enemies).toBeGreaterThan(0);
+  await context.close(); await page.waitForFunction(() => window.stillLife.state.players.length === 1);
+  expect(errors).toEqual([]);
+});
+test('mobile layout fits and missing rooms give a useful error', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/');
+  await page.waitForFunction(() => window.stillLife?.stats.triangles > 0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'artifacts/mobile.png', fullPage: true });
+  await page.locator('#room-code').fill('XXXXX'); await page.locator('#join').click();
+  await expect(page.locator('#connection-message')).toContainText('Room not found');
+  await expect(page.locator('#create')).toBeEnabled();
+});
