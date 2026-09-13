@@ -63,6 +63,7 @@ for (let i = 0; i < 4; i++) {
 let socket = null, playerId = null, state = null, mode = 'menu', lastSend = 0, lastPing = 0, connectionTimer, lastPhase = '', introTime = 0;
 let announcementUntil = 0, announcementText = '', lastHud = 0, latency = 0;
 let skipFirstLook = true;
+let lastDisconnect = null;
 const items = new Map(), enemies = new Map(), bullets = new Map(), allies = new Map(), particles = [];
 const keys = new Set();
 const v3 = new THREE.Vector3(), q4 = new THREE.Quaternion(), forward = new THREE.Vector3(), side = new THREE.Vector3();
@@ -115,8 +116,9 @@ function connect(action) {
     if (msg.type === 'pong') latency = Date.now() - msg.at;
   });
   ws.addEventListener('error', () => { $('connection-message').textContent = 'Cannot reach the multiplayer server. If this is GitHub Pages, set a separate server address.'; });
-  ws.addEventListener('close', () => {
+  ws.addEventListener('close', event => {
     if (socket !== ws) return;
+    lastDisconnect = { code: event.code, reason: event.reason, at: new Date().toISOString() };
     clearTimeout(connectionTimer); $('create').disabled = false; $('join').disabled = false;
     if (playerId) { toast('Disconnected. Create or join a room to reconnect.'); leave(false); }
     socket = null;
@@ -380,5 +382,5 @@ renderer.setAnimationLoop(time => {
 });
 
 // Small read-only diagnostics are useful when checking a real headset or desktop browser.
-window.stillLife = { get state() { return state; }, get playerId() { return playerId; }, get mode() { return mode; }, get stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, latency }; } };
+window.stillLife = { get state() { return state; }, get playerId() { return playerId; }, get mode() { return mode; }, get lastDisconnect() { return lastDisconnect; }, get stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, latency }; } };
 for (const id of ['name', 'room-code', 'create', 'join']) $(id).disabled = false;

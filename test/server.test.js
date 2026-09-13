@@ -42,3 +42,17 @@ test('invalid room and malformed messages fail without crashing the server', asy
     c.send({ type: 'create' }); assert.ok((await c.wait(m => m.type === 'welcome')).id);
   } finally { c.ws.terminate(); await app.close(); }
 });
+test('heartbeat tolerates missed pongs briefly, then removes a dead connection', async () => {
+  const app = createGameServer({ heartbeatIntervalMs: 20, heartbeatTimeoutMs: 180 });
+  await new Promise(done => app.server.listen(0, '127.0.0.1', done));
+  const ws = new WebSocket(`ws://127.0.0.1:${app.server.address().port}/ws`, { autoPong: false });
+  try {
+    await new Promise(resolve => ws.once('open', resolve));
+    await new Promise(resolve => setTimeout(resolve, 70));
+    assert.equal(ws.readyState, WebSocket.OPEN);
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Dead socket was not cleaned up')), 1500);
+      ws.once('close', () => { clearTimeout(timer); resolve(); });
+    });
+  } finally { ws.terminate(); await app.close(); }
+});

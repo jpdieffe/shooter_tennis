@@ -8,7 +8,7 @@ import { Game } from './game.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
-export function createGameServer() {
+export function createGameServer({ heartbeatIntervalMs = 15000, heartbeatTimeoutMs = 90000 } = {}) {
   const rooms = new Map();
   const server = http.createServer(async (req, res) => {
     if (req.url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rooms: rooms.size })); return; }
@@ -28,8 +28,8 @@ export function createGameServer() {
   const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8192 });
   const send = (ws, data) => { if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 250000) ws.send(JSON.stringify(data)); };
   wss.on('connection', ws => {
-    ws.isAlive = true; ws.bucket = 160; ws.bucketAt = Date.now();
-    ws.on('pong', () => { ws.isAlive = true; });
+    ws.lastPong = Date.now(); ws.bucket = 160; ws.bucketAt = Date.now();
+    ws.on('pong', () => { ws.lastPong = Date.now(); });
     ws.on('error', () => {});
     ws.on('message', raw => {
       const now = Date.now(); ws.bucket = Math.min(160, ws.bucket + (now - ws.bucketAt) * 0.1); ws.bucketAt = now;
@@ -80,8 +80,11 @@ export function createGameServer() {
     }
   }, 1000 / 60);
   const heartbeat = setInterval(() => {
-    for (const ws of wss.clients) { if (!ws.isAlive) { ws.terminate(); continue; } ws.isAlive = false; ws.ping(); }
-  }, 15000);
+    for (const ws of wss.clients) {
+      if (Date.now() - ws.lastPong > heartbeatTimeoutMs) { ws.terminate(); continue; }
+      ws.ping();
+    }
+  }, heartbeatIntervalMs);
   async function close() {
     clearInterval(timer); clearInterval(heartbeat);
     for (const ws of wss.clients) ws.terminate();
