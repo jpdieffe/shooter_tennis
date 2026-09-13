@@ -43,3 +43,8 @@ export function moveBody(position, dx, dz, radius = 0.23) {
   }
   return p;
 }
+export function turnAroundHead(origin, head, angle) {
+  const x = origin[0] - head[0], z = origin[2] - head[2];
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  return [head[0] + x * cos + z * sin, origin[1], head[2] - x * sin + z * cos];
+}

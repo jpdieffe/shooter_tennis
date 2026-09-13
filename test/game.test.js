@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game as BaseGame } from '../server/game.js';
-import { segmentBox, moveBody } from '../public/shared/world.js';
+import { segmentBox, moveBody, turnAroundHead } from '../public/shared/world.js';
 class Game extends BaseGame {
   addPlayer(name) { const p = super.addPlayer(name); p.active = true; return p; }
 }
@@ -75,4 +75,12 @@ test('starting a run preserves a weapon grabbed in the lobby', () => {
 test('a surviving partner disconnecting ends the run for a downed player', () => {
   const game = new Game('TEST1'), a = game.addPlayer(), b = game.addPlayer(); game.phase = 'playing'; a.health = 0;
   game.removePlayer(b.id); game.step(1 / 60); assert.equal(game.phase, 'gameover');
+});
+test('VR snap turns preserve head position when standing away from the tracking origin', () => {
+  const origin = [2, 0, 3], head = [3, 1.65, 5], angle = Math.PI / 6;
+  const turned = turnAroundHead(origin, head, angle);
+  const localX = head[0] - origin[0], localZ = head[2] - origin[2];
+  const resultingHead = [turned[0] + localX * Math.cos(angle) + localZ * Math.sin(angle), head[1], turned[2] - localX * Math.sin(angle) + localZ * Math.cos(angle)];
+  assert.ok(Math.hypot(...head.map((n, i) => n - resultingHead[i])) < 1e-10);
+  assert.deepEqual(turnAroundHead(origin, [origin[0], 1.65, origin[2]], angle), origin);
 });

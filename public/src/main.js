@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { createWorld, makeEnemy, makeItem, makeAlly, makeWristHUD, palette, box, textPlane } from './scene.js';
-import { moveBody, distance, clamp } from '../shared/world.js';
+import { moveBody, turnAroundHead, distance, clamp } from '../shared/world.js';
 
 const $ = id => document.getElementById(id);
 const show = (id, visible) => $(id).classList.toggle('hidden', !visible);
@@ -283,9 +283,10 @@ function locomotion(dt) {
       if (source.handedness === 'left') { x = Math.abs(ax) > 0.18 ? ax : 0; z = Math.abs(ay) > 0.18 ? -ay : 0; }
       if (source.handedness === 'right') {
         if (Math.abs(ax) > 0.7 && !controller.snapping) {
-          const before = renderer.xr.getCamera().getWorldPosition(new THREE.Vector3());
-          rig.rotation.y -= Math.sign(ax) * Math.PI / 6; rig.updateMatrixWorld(true);
-          const after = renderer.xr.getCamera().getWorldPosition(new THREE.Vector3()); rig.position.x += before.x - after.x; rig.position.z += before.z - after.z; controller.snapping = true;
+          const head = renderer.xr.getCamera().getWorldPosition(new THREE.Vector3());
+          const angle = -Math.sign(ax) * Math.PI / 6;
+          rig.position.fromArray(turnAroundHead(rig.position.toArray(), head.toArray(), angle));
+          rig.rotation.y += angle; rig.updateMatrixWorld(true); controller.snapping = true;
         }
         if (Math.abs(ax) < 0.3) controller.snapping = false;
       }
