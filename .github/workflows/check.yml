@@ -22,4 +22,6 @@ jobs:
         if: always()
         with:
           name: browser-screenshots
-          path: artifacts/*.png
+          path: |
+            artifacts/*.png
+            test-results/

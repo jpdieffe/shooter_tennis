@@ -21,10 +21,10 @@
     </div>
     <section class="session-panel" aria-label="Start a game">
       <div class="panel-top"><span>01 / ENTER THE APARTMENT</span><span class="tiny-cross">+</span></div>
-      <label for="name">YOUR CALLSIGN</label><input id="name" maxlength="18" placeholder="Player" autocomplete="nickname" />
-      <button id="create" class="primary">CREATE A ROOM <span>↗</span></button>
+      <label for="name">YOUR CALLSIGN</label><input id="name" maxlength="18" placeholder="Player" autocomplete="nickname" disabled />
+      <button id="create" class="primary" disabled>CREATE A ROOM <span>↗</span></button>
       <div class="divider"><span>OR JOIN YOUR PARTNER</span></div>
-      <form id="join-form"><label class="sr-only" for="room-code">Room code</label><input id="room-code" maxlength="5" placeholder="ROOM CODE" autocomplete="off" spellcheck="false" required pattern="[a-zA-Z2-9]{5}" /><button id="join" type="submit" aria-label="Join room">JOIN ↗</button></form>
+      <form id="join-form"><label class="sr-only" for="room-code">Room code</label><input id="room-code" maxlength="5" placeholder="ROOM CODE" autocomplete="off" spellcheck="false" required pattern="[a-zA-Z2-9]{5}" disabled /><button id="join" type="submit" aria-label="Join room" disabled>JOIN ↗</button></form>
       <details><summary>Connection settings</summary><label for="server-url">MULTIPLAYER SERVER</label><input id="server-url" placeholder="Same server as this website" type="url" /><p>For a separately hosted game, enter your server’s HTTPS or WSS address.</p></details>
       <p id="connection-message" role="status">Create a room to play solo or invite a friend.</p>
     </section>

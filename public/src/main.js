@@ -377,3 +377,4 @@ renderer.setAnimationLoop(time => {
 
 // Small read-only diagnostics are useful when checking a real headset or desktop browser.
 window.stillLife = { get state() { return state; }, get playerId() { return playerId; }, get mode() { return mode; }, get stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, latency }; } };
+for (const id of ['name', 'room-code', 'create', 'join']) $(id).disabled = false;

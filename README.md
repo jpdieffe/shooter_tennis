@@ -37,6 +37,19 @@ For a quick session from this computer:
 
 Keep the computer, Node process, and tunnel running. The temporary address changes when a new tunnel is created. This also works from separate homes. Tunnel/network latency affects multiplayer responsiveness.
 
+For later sessions, `npm run share` starts the server (if needed) and the tunnel together. It uses `cloudflared` from your PATH or the portable `artifacts/cloudflared.exe` downloaded during setup. The new HTTPS address is printed in the terminal and saved to `artifacts/online-session.json`. This is a computer-hosted session, not an always-on cloud server.
+
+### Test a Quest over USB
+
+Enable Developer Mode for your headset in the Meta Horizon app, use a USB data cable, and accept the headset's **Allow USB debugging** prompt. `adb devices -l` must list the Quest as `device` before automated headset inspection is possible. Once it does:
+
+```sh
+adb reverse tcp:3000 tcp:3000
+adb shell am start -a android.intent.action.VIEW -d http://localhost:3000 com.oculus.browser
+```
+
+USB reverse makes the headset's localhost reach this computer, which supports local WebXR testing. It does not provide your friend's internet connection; use the HTTPS link for that. See [Meta's browser debugging guide](https://developers.meta.com/horizon/documentation/web/browser-remote-debugging/).
+
 If VR is unavailable, confirm you opened an HTTPS link in the headset's own browser. Browser support is detected on the lobby screen. See [WebXR's secure-context requirements](https://developer.mozilla.org/en-US/docs/Web/API/WebXR_Device_API/Startup_and_shutdown).
 
 ## Controls
@@ -102,6 +115,10 @@ GitHub Pages can host the website, but **cannot run the multiplayer server**. A 
 3. Run the included **Publish game website** workflow manually. It builds and publishes `dist/`.
 4. On the hosted game, open **Connection settings** and enter the Node server's HTTPS address. Both players must use the same server. The address is saved locally and included in copied invite links.
 
+To configure that address automatically, set the repository's **Actions variable** `GAME_SERVER_URL` to the server's HTTPS origin. The Pages build writes it to `config.json`; players can then create/join without entering a server. The workflow deploys on pushes to `main` once Pages is enabled, or by manual dispatch. After restarting a temporary tunnel, update this variable and run **Publish game website** again. An explicit connection setting or invite-link server takes precedence over the deployment default.
+
+GitHub Pages availability for private repositories depends on your GitHub plan. Enabling Pages does not automatically change repository visibility.
+
 Relative imports support the `/shooter_tennis/` Pages path. The standalone build includes Three.js and locally hosted fonts; runtime CDN access is unnecessary. See [GitHub's custom Pages workflow guide](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
 ## Development and verification
@@ -115,6 +132,8 @@ npm run test:browser        # Rendering, two browser players, pickup/fire/throw,
 ```
 
 Browser screenshots are written to `artifacts/`. If testing with an installed Chrome instead, set `PLAYWRIGHT_CHANNEL=chrome`. The browser runner requires an environment that permits WebGL; an OS sandbox may block GPU/software rendering.
+
+Set `GAME_TEST_URL` to a deployed website URL (including its trailing slash and project path) to run the same two-player browser tests over the internet. For example in PowerShell: `$env:GAME_TEST_URL='https://jpdieffe.github.io/shooter_tennis/'; npm run test:browser`. These tests create and clean up their own rooms.
 
 Files:
 
