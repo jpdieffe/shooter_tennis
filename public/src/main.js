@@ -62,6 +62,7 @@ for (let i = 0; i < 4; i++) {
 
 let socket = null, playerId = null, state = null, mode = 'menu', lastSend = 0, lastPing = 0, connectionTimer, lastPhase = '', introTime = 0;
 let announcementUntil = 0, announcementText = '', lastHud = 0, latency = 0;
+let skipFirstLook = true;
 const items = new Map(), enemies = new Map(), bullets = new Map(), allies = new Map(), particles = [];
 const keys = new Set();
 const v3 = new THREE.Vector3(), q4 = new THREE.Quaternion(), forward = new THREE.Vector3(), side = new THREE.Vector3();
@@ -259,6 +260,8 @@ document.addEventListener('keydown', event => {
 document.addEventListener('keyup', event => keys.delete(event.code));
 document.addEventListener('mousemove', event => {
   if (document.pointerLockElement !== $('game') || mode !== 'play' || renderer.xr.isPresenting) return;
+  // Some browsers emit a cursor-recentering movement when pointer lock begins.
+  if (skipFirstLook) { skipFirstLook = false; return; }
   rig.rotation.y -= event.movementX * 0.002; camera.rotation.x = clamp(camera.rotation.x - event.movementY * 0.002, -1.25, 1.25);
 });
 $('game').addEventListener('mousedown', event => {
@@ -266,7 +269,7 @@ $('game').addEventListener('mousedown', event => {
   if (document.pointerLockElement !== $('game')) { $('game').requestPointerLock?.()?.catch(() => {}); return; }
   audioStart(); sendPose(); send({ type: 'shoot', hand: 1 });
 });
-document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && mode === 'play' && !renderer.xr.isPresenting) pause(); });
+document.addEventListener('pointerlockchange', () => { skipFirstLook = true; if (!document.pointerLockElement && mode === 'play' && !renderer.xr.isPresenting) pause(); });
 document.addEventListener('visibilitychange', () => { keys.clear(); send({ type: 'active', active: !document.hidden && mode === 'play' }); });
 window.addEventListener('blur', () => keys.clear());
 window.addEventListener('resize', () => {

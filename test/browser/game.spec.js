@@ -12,6 +12,7 @@ test('landing page, two-player room, wave start, and disconnect', async ({ page,
   await expect(page.locator('#roster')).toContainText('2/2'); await expect(friend.locator('#roster')).toContainText('Alpha + Bravo');
   await page.bringToFront();
   await page.locator('#start').click();
+  await page.waitForFunction(() => document.pointerLockElement === document.getElementById('game'));
   await page.waitForFunction(() => window.stillLife.state.phase === 'playing', null, { timeout: 15000 });
   await friend.waitForFunction(() => window.stillLife.state.phase === 'playing');
   await page.bringToFront();
