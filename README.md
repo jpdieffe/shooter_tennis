@@ -54,6 +54,8 @@ If VR is unavailable, confirm you opened an HTTPS link in the headset's own brow
 
 ## Controls
 
+**If Enter VR appears stuck:** the button now shows `OPENING VR`, then `RELOAD VR` after 12 seconds if the browser hasn't completed its request. Finish any headset permission or boundary prompt first. Otherwise reload, rejoin, and try again while wearing the headset. Repeated clicks cannot create overlapping VR requests. If even the [official immersive VR sample](https://immersive-web.github.io/webxr-samples/immersive-vr-session.html) fails, restart Quest Browser or the headset before retrying. VR startup status is available in `window.stillLife.vr` for debugging.
+
 | Action | Quest Touch controllers | Desktop |
 | --- | --- | --- |
 | Look / dodge | Move your head and body | Mouse look |
@@ -84,6 +86,10 @@ On desktop, click the game to capture your mouse. The crosshair is an aiming gui
 ## Permanent hosting
 
 The simplest deployment is **one Node web service** that serves the game and WebSockets from the same HTTPS domain. No separate static site is necessary.
+
+The included `render.yaml` prepares a single free Render web service. [Deploy Still Life to Render](https://render.com/deploy?repo=https://github.com/jpdieffe/shooter_tennis). Sign in to your Render account and review/create the service, then use its HTTPS address on both headsets. The game and multiplayer run there, so your PC can be off. No hosting account or cloud service is created by this repository itself.
+
+[Free Render services](https://render.com/docs/free) sleep after 15 minutes without inbound traffic and take about a minute to wake. Open the service's website and let it finish loading before creating a room. Active WebSocket messages count as traffic. Restarts erase current rooms. This blueprint disables automatic deployments so a code push cannot interrupt a match; deploy updates from the Render dashboard when ready.
 
 For example, connect this repository to a [Render Node web service](https://render.com/docs/deploy-node-express-app):
 

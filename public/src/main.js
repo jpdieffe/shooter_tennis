@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { createVRControl } from './vr.js';
 import { createWorld, makeEnemy, makeItem, makeAlly, makeWristHUD, palette, box, textPlane } from './scene.js';
 import { moveBody, turnAroundHead, distance, clamp } from '../shared/world.js';
 
@@ -19,7 +19,7 @@ let renderer;
 try { renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, powerPreference: 'high-performance' }); }
 catch { $('connection-message').textContent = 'WebGL is unavailable. Open this page in Quest Browser or a browser with hardware acceleration.'; $('create').disabled = true; $('join').disabled = true; throw new Error('WebGL unavailable'); }
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.65)); renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
 renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local-floor'); renderer.xr.setFramebufferScaleFactor(0.9);
 const scene = new THREE.Scene(); createWorld(scene);
@@ -152,7 +152,7 @@ function pause() {
   $('pause-info').textContent = over ? `Wave ${state.wave} · ${state.kills} enemies shattered. Ready for another run?` : `Room ${state?.code} · ${latency} ms · Your teammate can keep playing.`;
   show('restart', over); document.exitPointerLock?.();
 }
-let vrReady = false;
+let vrReady = false, vrControl = null;
 async function initVR() {
   if (vrReady) return;
   if (!isSecureContext) { $('vr-note').textContent = 'Quest VR needs HTTPS. Use the HTTPS setup in README.md.'; return; }
@@ -160,8 +160,9 @@ async function initVR() {
     $('vr-note').textContent = 'Open this same link in Quest Browser to enter VR. Desktop play is available here.'; return;
   }
   vrReady = true;
-  const button = VRButton.createButton(renderer, { optionalFeatures: ['local-floor', 'bounded-floor'] });
-  $('vr-slot').append(button); $('vr-note').textContent = 'Enter VR, grab a weapon, then pull a trigger to start. Your room code is on your wrist.';
+  const button = document.createElement('button');
+  vrControl = createVRControl({ button, note: $('vr-note'), renderer, xr: navigator.xr, canEnter: () => !!playerId });
+  $('vr-slot').append(button);
 }
 renderer.xr.addEventListener('sessionstart', () => {
   enterPlay(false); camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
@@ -382,5 +383,5 @@ renderer.setAnimationLoop(time => {
 });
 
 // Small read-only diagnostics are useful when checking a real headset or desktop browser.
-window.stillLife = { get state() { return state; }, get playerId() { return playerId; }, get mode() { return mode; }, get lastDisconnect() { return lastDisconnect; }, get stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, latency }; } };
+window.stillLife = { get state() { return state; }, get playerId() { return playerId; }, get mode() { return mode; }, get lastDisconnect() { return lastDisconnect; }, get vr() { return vrControl?.status; }, get stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, latency }; } };
 for (const id of ['name', 'room-code', 'create', 'join']) $(id).disabled = false;
