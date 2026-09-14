@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ARENA, SOLIDS, SPAWNS, clamp, distance, direction, segmentDistance, segmentBox, moveBody } from '../public/shared/world.js';
+import { ARENA, SOLIDS, SPAWNS, clamp, distance, direction, pistolMuzzle, segmentDistance, segmentBox, moveBody } from '../public/shared/world.js';
 
 const vec = (v, n) => Array.isArray(v) && v.length === n && v.every(x => Number.isFinite(x) && Math.abs(x) < 1000);
 const quat = q => {
@@ -92,7 +92,7 @@ export class Game {
     p.lastShot = this.elapsed;
     if (item.ammo <= 0) { this.event('empty', { player: id }); return; }
     item.ammo--;
-    const dir = direction(p.hands[hand].q), origin = p.hands[hand].p.map((n, i) => n + dir[i] * 0.23);
+    const dir = direction(p.hands[hand].q), origin = pistolMuzzle(p.hands[hand]);
     this.bullets.push({ id: this.id(), p: origin, v: dir.map(n => n * 24), owner: id, enemy: false, life: 5 });
     p.motion = 1;
     this.event('shot', { p: origin, player: id });

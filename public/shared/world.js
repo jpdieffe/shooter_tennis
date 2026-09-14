@@ -11,6 +11,14 @@ export const SOLIDS = [
 export const SPAWNS = [[-6.5, 0, -6.4], [0, 0, -6.6], [6.5, 0, -6.4], [-6.6, 0, 0], [6.6, 0, -2.8]];
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const distance = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
+export const PISTOL_MUZZLE = [0, 0.025, -0.244];
+export function pistolMuzzle(pose) {
+  const [x, y, z] = PISTOL_MUZZLE, [qx, qy, qz, qw] = pose.q;
+  const tx = 2 * (qy * z - qz * y), ty = 2 * (qz * x - qx * z), tz = 2 * (qx * y - qy * x);
+  return [pose.p[0] + x + qw * tx + qy * tz - qz * ty,
+    pose.p[1] + y + qw * ty + qz * tx - qx * tz,
+    pose.p[2] + z + qw * tz + qx * ty - qy * tx];
+}
 export function direction(q) {
   const [x, y, z, w] = q;
   return [-2 * (x * z + w * y), -2 * (y * z - w * x), -(1 - 2 * (x * x + y * y))];

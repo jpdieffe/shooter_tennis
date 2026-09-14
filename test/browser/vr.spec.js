@@ -1,0 +1,58 @@
+import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+test('Quest VR keeps tracked hands, muzzle, movement, and calibrated height in the same world', async ({page}) => {
+  const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.log('VR page error:',e.message);});
+  const runtime=readFileSync(new URL('../../node_modules/iwer/build/iwer.min.js',import.meta.url),'utf8');
+  await page.addInitScript({content:runtime+`;(() => {
+    const device=window.__xrDevice=new IWER.XRDevice(IWER.metaQuest3);
+    device.position.set(.6,1.0,-.3);
+    device.controllers.left.position.set(.3,.7,-.6);
+    device.controllers.right.position.set(.8,.5,-1.2);
+    device.installRuntime({forceInstall:true});
+    window.__shots=[];const NativeSocket=window.WebSocket;
+    window.WebSocket=class extends NativeSocket {constructor(...args){super(...args);this.addEventListener('message',({data})=>{const msg=JSON.parse(data);if(msg.type==='state')for(const event of msg.events||[])if(event.type==='shot')window.__shots.push(event);});}};
+  })();`});
+  await page.setViewportSize({width:960,height:720});await page.goto('./');
+  await page.locator('#name').fill('VR Test');await page.locator('#create').click();
+  await expect(page.locator('#lobby')).toBeVisible({timeout:15000});
+  await expect(page.locator('#VRButton')).toBeVisible({timeout:15000});
+  await page.locator('#VRButton').click();
+  await page.waitForFunction(()=>stillLife.vr?.phase==='presenting'&&stillLife.tracking.ready&&stillLife.stats.calls>0);
+  await expect.poll(()=>page.evaluate(()=>stillLife.tracking.head.p[1])).toBeCloseTo(1.65,3);
+  await expect.poll(()=>page.evaluate(()=>{const p=stillLife.state.players.find(p=>p.id===stillLife.playerId);return Math.hypot(...p.head.p.map((n,i)=>n-stillLife.tracking.head.p[i]));})).toBeLessThan(.02);
+  await page.evaluate(()=>__xrDevice.controllers.right.updateButtonValue('squeeze',1));
+  await page.waitForFunction(()=>stillLife.state.items.some(i=>i.heldBy===stillLife.playerId&&i.kind==='pistol'));
+  await page.evaluate(()=>__xrDevice.controllers.right.updateButtonValue('trigger',1));
+  await page.waitForFunction(()=>stillLife.state.phase==='countdown');
+  await page.evaluate(()=>__xrDevice.controllers.right.updateButtonValue('trigger',0));
+  await page.waitForFunction(()=>stillLife.state.phase==='playing');
+  await page.evaluate(()=>__xrDevice.controllers.left.updateAxes('thumbstick',0,-.7));
+  await page.waitForFunction(()=>stillLife.tracking.head.p[2]<3.4);
+  await page.evaluate(()=>__xrDevice.controllers.left.updateAxes('thumbstick',0,0));
+  await page.waitForTimeout(200);
+  const headBefore=await page.evaluate(()=>stillLife.tracking.head.p);
+  await page.evaluate(()=>__xrDevice.controllers.right.updateAxes('thumbstick',.8,0));
+  await page.waitForTimeout(250);
+  await page.evaluate(()=>__xrDevice.controllers.right.updateAxes('thumbstick',0,0));
+  const headAfter=await page.evaluate(()=>stillLife.tracking.head.p);
+  expect(Math.hypot(...headAfter.map((n,i)=>n-headBefore[i]))).toBeLessThan(.02);
+  await page.evaluate(()=>__xrDevice.controllers.right.updateButtonValue('trigger',1));
+  await page.waitForFunction(()=>__shots.some(s=>s.player===stillLife.playerId));
+  const shot=await page.evaluate(async()=>{
+    const {Vector3,Quaternion}=await import('three');
+    const gun=stillLife.state.items.find(i=>i.heldBy===stillLife.playerId&&i.kind==='pistol');
+    const hand=stillLife.tracking.hands[gun.hand];
+    const muzzle=new Vector3(0,.025,-.244).applyQuaternion(new Quaternion(...hand.q)).add(new Vector3(...hand.p));
+    const actual=__shots.find(s=>s.player===stillLife.playerId).p;
+    return {error:muzzle.distanceTo(new Vector3(...actual)),serverHandError:new Vector3(...hand.p).distanceTo(new Vector3(...stillLife.state.players.find(p=>p.id===stillLife.playerId).hands[gun.hand].p))};
+  });
+  expect(shot.error).toBeLessThan(.03);expect(shot.serverHandError).toBeLessThan(.02);
+  await page.evaluate(()=>{__xrDevice.controllers.right.updateButtonValue('trigger',0);__xrDevice.position.y-=.25;});
+  await expect.poll(()=>page.evaluate(()=>stillLife.tracking.head.p[1])).toBeCloseTo(1.4,2);
+  await page.evaluate(()=>__xrDevice.controllers.left.updateButtonValue('thumbstick',1));
+  await expect.poll(()=>page.evaluate(()=>stillLife.tracking.head.p[1])).toBeCloseTo(1.65,2);
+  await page.evaluate(()=>__xrDevice.controllers.left.updateButtonValue('thumbstick',0));
+  await page.screenshot({path:'artifacts/vr-gameplay.png'});
+  expect(errors).toEqual([]);
+});

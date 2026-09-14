@@ -54,12 +54,15 @@ If VR is unavailable, confirm you opened an HTTPS link in the headset's own brow
 
 ## Controls
 
+The lobby's **VR height** setting defaults to **Comfortable height**. On entering VR it places your eyes at 1.65 m and moves your hands by the same amount; seated play works, and physical crouching still lowers your view afterward. Click the **left thumbstick** to recalibrate from your current posture. Choose **Use my real height** to use the headset's floor height without an offset. Each VR entry positions your tracked head at your in-game starting point, even when you stand away from your physical tracking origin.
+
 **If Enter VR appears stuck:** the button now shows `OPENING VR`, then `RELOAD VR` after 12 seconds if the browser hasn't completed its request. Finish any headset permission or boundary prompt first. Otherwise reload, rejoin, and try again while wearing the headset. Repeated clicks cannot create overlapping VR requests. If even the [official immersive VR sample](https://immersive-web.github.io/webxr-samples/immersive-vr-session.html) fails, restart Quest Browser or the headset before retrying. VR startup status is available in `window.stillLife.vr` for debugging.
 
 | Action | Quest Touch controllers | Desktop |
 | --- | --- | --- |
 | Look / dodge | Move your head and body | Mouse look |
 | Move | Left thumbstick, optional | WASD |
+| Reset height | Click left thumbstick | — |
 | Crouch / reach the floor | Physically crouch | Hold C |
 | Turn | Physical turning or right-stick 30° snap turns | Mouse |
 | Grab | Hold grip near an object | E near an object |
@@ -149,6 +152,8 @@ Files:
 - `server/game.js` — server-owned clock, waves, enemies, damage, and item ownership.
 - `server/index.js` — static files, WebSocket rooms, input limits, and cleanup.
 - `test/` — simulation, server, and browser tests.
+
+The browser suite also injects Meta's IWER Quest 3 emulator into its test page to exercise immersive entry, off-center/seated tracking, controller pickup/fire, snap turning, muzzle position, crouching, and height reset. IWER is a development dependency and is never loaded into the published game.
 
 ### Prototype limits
 

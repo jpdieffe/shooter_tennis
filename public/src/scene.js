@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { SOLIDS } from '../shared/world.js';
+import { SOLIDS, PISTOL_MUZZLE } from '../shared/world.js';
 
 export const palette = { red: 0xe94430, ink: 0x202a29, teal: 0x29bba8, paper: 0xeaece3 };
 const white = new THREE.MeshStandardMaterial({ color: 0xe7e9df, roughness: 0.9 });
@@ -31,7 +31,7 @@ export function makeItem(kind) {
     g.add(box(0.085, 0.1, 0.3, black, 0, 0.025, -0.085));
     const handle = box(0.075, 0.16, 0.085, black, 0, -0.095, 0.025); handle.rotation.x = -0.2; g.add(handle);
     g.add(box(0.035, 0.018, 0.04, red, 0, 0.085, -0.16));
-    g.add(box(0.026, 0.035, 0.008, edge, 0, 0.025, -0.24));
+    g.add(box(0.026, 0.035, 0.008, edge, PISTOL_MUZZLE[0], PISTOL_MUZZLE[1], PISTOL_MUZZLE[2] + 0.004));
     g.add(box(0.018, 0.07, 0.04, black, 0, -0.06, -0.065));
   } else if (kind === 'bottle') {
     g.add(cylinder(0.064, 0.06, 0.22, 8, black));

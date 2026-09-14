@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createVRControl } from './vr.js';
-import { heldPose } from './poses.js';
+import { heldPose, updateTrackedHead, calibrateRig } from './poses.js';
 import { createWorld, makeEnemy, makeItem, makeAlly, makeWristHUD, palette, box, textPlane } from './scene.js';
 import { moveBody, turnAroundHead, distance, clamp } from '../shared/world.js';
 
@@ -15,6 +15,7 @@ const deploymentConfig = await fetch(new URL('../config.json', import.meta.url),
 $('name').value = storage.get('still-life-name');
 $('server-url').value = query.get('server') || storage.get('still-life-server') || deploymentConfig.serverUrl || '';
 $('room-code').value = query.get('room') || '';
+$('vr-height').value = storage.get('still-life-height') === 'floor' ? 'floor' : 'comfortable';
 
 let renderer;
 try { renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, powerPreference: 'high-performance' }); }
@@ -26,6 +27,8 @@ renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local-floor'); re
 const scene = new THREE.Scene(); createWorld(scene);
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 60); camera.position.y = 1.65; camera.rotation.order = 'YXZ';
 const rig = new THREE.Group(); rig.add(camera); scene.add(rig);
+const trackedHead = new THREE.PerspectiveCamera(); rig.add(trackedHead);
+let trackingReady = false, entryAnchor = null;
 const menuCamera = new THREE.PerspectiveCamera(43, innerWidth / innerHeight, 0.1, 90);
 const menuTarget = new THREE.Vector3(0, 0.4, -0.8);
 const desktopHands = [new THREE.Group(), new THREE.Group()];
@@ -36,15 +39,15 @@ const xr = [0, 1].map(index => {
   rig.add(ray, grip);
   const hand = box(0.072, 0.095, 0.11, localHandMaterial, 0, -0.018, 0.02); grip.add(hand);
   const beam = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -0.6)]), new THREE.LineBasicMaterial({ color: palette.teal, transparent: true, opacity: 0.2 })); ray.add(beam);
-  const data = { ray, grip, hand, beam, source: null, history: [], snapping: false };
+  const data = { ray, grip, hand, beam, source: null, history: [], snapping: false, heightPressed: false };
   ray.addEventListener('connected', event => { data.source = event.data; });
   ray.addEventListener('disconnected', () => { data.source = null; data.history = []; });
-  ray.addEventListener('squeezestart', () => { sendPose(); send({ type: 'grab', hand: index }); haptic(index, 0.3); });
+  ray.addEventListener('squeezestart', () => { if (sendPose()) { send({ type: 'grab', hand: index }); haptic(index, 0.3); } });
   ray.addEventListener('squeezeend', () => release(index, true));
   ray.addEventListener('selectstart', () => {
     audioStart();
     if (state && ['lobby', 'gameover'].includes(state.phase)) send({ type: 'start' });
-    else { sendPose(); send({ type: 'shoot', hand: index }); haptic(index, 0.4); }
+    else if (sendPose()) { send({ type: 'shoot', hand: index }); haptic(index, 0.4); }
   });
   return data;
 });
@@ -88,11 +91,12 @@ function handPose(index) {
 }
 function getPose(obj) { return { p: obj.getWorldPosition(new THREE.Vector3()).toArray(), q: obj.getWorldQuaternion(new THREE.Quaternion()).toArray() }; }
 function sendPose() {
-  if (!playerId || mode === 'menu') return;
+  if (!playerId || mode === 'menu' || (renderer.xr.isPresenting && !trackingReady)) return false;
   rig.updateMatrixWorld(true);
-  const head = getPose(renderer.xr.isPresenting ? renderer.xr.getCamera() : camera);
+  const head = getPose(renderer.xr.isPresenting ? trackedHead : camera);
   const hands = [handPose(0), handPose(1)];
   send({ type: 'pose', head, hands });
+  return true;
 }
 function endpoint() {
   const raw = $('server-url').value.trim();
@@ -171,14 +175,20 @@ async function initVR() {
   $('vr-slot').append(button);
 }
 renderer.xr.addEventListener('sessionstart', () => {
+  trackingReady = false; entryAnchor = [...(me()?.head.p || getPose(camera).p)];
   enterPlay(false); camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
   renderer.xr.setFoveation(1); vrBanner.visible = true;
   const session = renderer.xr.getSession();
   session.addEventListener('visibilitychange', () => send({ type: 'active', active: session.visibilityState === 'visible' }));
 });
 renderer.xr.addEventListener('sessionend', () => {
+  if (trackingReady) {
+    const position = trackedHead.getWorldPosition(new THREE.Vector3());
+    rig.position.x = position.x; rig.position.z = position.z;
+  }
+  rig.position.y = 0; trackingReady = false; entryAnchor = null;
   camera.position.set(0, 1.65, 0); camera.rotation.set(0, 0, 0); vrBanner.visible = false;
-  xr.forEach(c => { c.history = []; });
+  xr.forEach(c => { c.history = []; c.heightPressed = false; });
   if (playerId) { mode = 'lobby'; document.body.classList.remove('playing'); show('hud', false); show('pause', false); show('lobby', true); send({ type: 'active', active: false }); }
 });
 function announce(text, seconds = 2) { announcementText = text; announcementUntil = performance.now() + seconds * 1000; }
@@ -231,7 +241,7 @@ function sync(map, records, create) {
 }
 function release(index, throwing) {
   if (!held(index)) return;
-  sendPose(); let velocity = [0, 0, 0];
+  if (!sendPose()) return; let velocity = [0, 0, 0];
   if (throwing && renderer.xr.isPresenting) {
     const samples = xr[index].history, last = samples.at(-1), first = samples.find(s => last?.time - s.time < 110);
     if (last && first && last.time > first.time) velocity = last.p.map((n, i) => (n - first.p[i]) / ((last.time - first.time) / 1000));
@@ -286,16 +296,23 @@ window.addEventListener('resize', () => {
 });
 
 function locomotion(dt) {
-  if (mode !== 'play' || me()?.health <= 0) return;
+  if (mode !== 'play' || me()?.health <= 0 || (renderer.xr.isPresenting && !trackingReady)) return;
   let x = 0, z = 0;
   if (renderer.xr.isPresenting) {
     for (const controller of xr) {
       const source = controller.source, axes = source?.gamepad?.axes; if (!axes) continue;
       const ax = axes.length >= 4 ? axes[2] : axes[0], ay = axes.length >= 4 ? axes[3] : axes[1];
-      if (source.handedness === 'left') { x = Math.abs(ax) > 0.18 ? ax : 0; z = Math.abs(ay) > 0.18 ? -ay : 0; }
+      if (source.handedness === 'left') {
+        x = Math.abs(ax) > 0.18 ? ax : 0; z = Math.abs(ay) > 0.18 ? -ay : 0;
+        const pressed = !!source.gamepad.buttons[3]?.pressed;
+        if (pressed && !controller.heightPressed) {
+          resetHeight(); announce('HEIGHT RESET', 1.5); haptic(xr.indexOf(controller), 0.3);
+        }
+        controller.heightPressed = pressed;
+      }
       if (source.handedness === 'right') {
         if (Math.abs(ax) > 0.7 && !controller.snapping) {
-          const head = renderer.xr.getCamera().getWorldPosition(new THREE.Vector3());
+          const head = trackedHead.getWorldPosition(new THREE.Vector3());
           const angle = -Math.sign(ax) * Math.PI / 6;
           rig.position.fromArray(turnAroundHead(rig.position.toArray(), head.toArray(), angle));
           rig.rotation.y += angle; rig.updateMatrixWorld(true); controller.snapping = true;
@@ -308,7 +325,7 @@ function locomotion(dt) {
     camera.position.y += ((keys.has('KeyC') ? 0.9 : 1.65) - camera.position.y) * Math.min(1, dt * 12);
   }
   const length = Math.hypot(x, z); if (length > 1) { x /= length; z /= length; }
-  const view = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+  const view = renderer.xr.isPresenting ? trackedHead : camera;
   view.getWorldDirection(forward); forward.y = 0; forward.normalize(); side.crossVectors(forward, THREE.Object3D.DEFAULT_UP).normalize();
   const delta = forward.clone().multiplyScalar(z * dt * 2.1).addScaledVector(side, x * dt * 2.1);
   view.getWorldPosition(v3);
@@ -373,9 +390,21 @@ function updateHud(time) {
     }
   }
 }
+function resetHeight(anchor = null) {
+  calibrateRig(rig, trackedHead, { anchor, eyeHeight: $('vr-height').value === 'floor' ? null : 1.65 });
+  xr.forEach(c => { c.history = []; });
+}
+$('vr-height').onchange = () => {
+  storage.set('still-life-height', $('vr-height').value);
+  if (renderer.xr.isPresenting && trackingReady) resetHeight();
+};
 let previous = 0;
-renderer.setAnimationLoop(time => {
+renderer.setAnimationLoop((time, frame) => {
   const dt = Math.min((time - previous) / 1000 || 0.016, 0.05); previous = time; introTime += dt;
+  if (renderer.xr.isPresenting) {
+    trackingReady = updateTrackedHead(trackedHead, frame, renderer.xr.getReferenceSpace());
+    if (trackingReady && entryAnchor) { resetHeight(entryAnchor); entryAnchor = null; }
+  }
   if (mode === 'menu') {
     menuCamera.position.set(12 + Math.sin(introTime * 0.06) * 0.8, 10.2, 15.7); menuCamera.lookAt(menuTarget);
     // A small horizontal offset reserves the left third for the title.
@@ -389,5 +418,5 @@ renderer.setAnimationLoop(time => {
 });
 
 // Small read-only diagnostics are useful when checking a real headset or desktop browser.
-window.stillLife = { get state() { return state; }, get playerId() { return playerId; }, get mode() { return mode; }, get lastDisconnect() { return lastDisconnect; }, get vr() { return vrControl?.status; }, get stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, latency }; } };
+window.stillLife = { get state() { return state; }, get playerId() { return playerId; }, get mode() { return mode; }, get lastDisconnect() { return lastDisconnect; }, get vr() { return vrControl?.status; }, get tracking() { return { ready: trackingReady, head: trackingReady ? getPose(trackedHead) : null, hands: trackingReady ? [handPose(0), handPose(1)] : null, rig: rig.position.toArray(), heightMode: $('vr-height').value }; }, get stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, latency }; } };
 for (const id of ['name', 'room-code', 'create', 'join']) $(id).disabled = false;
