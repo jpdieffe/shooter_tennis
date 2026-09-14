@@ -1,6 +1,6 @@
 # STILL LIFE
 
-A two-player WebXR survival game for Meta Quest 3, with a desktop mode for development and play. Time slows when you hold still. Grab a pistol, throw a mug, swing a frying pan, and survive escalating waves of red crystalline enemies in a minimalist apartment.
+A two-player WebXR survival game for Meta Quest 3, with a desktop mode for development and play. Time slows when you hold still. Grab a pistol, throw a mug, swing a frying pan, and survive escalating waves of red crystalline enemies across six distinct indoor and outdoor arenas.
 
 Original procedural visuals and synthesized sounds. Inspired by movement-driven action games; no SUPERHOT assets or branding are used.
 
@@ -82,6 +82,7 @@ On desktop, click the game to capture your mouse. The crosshair is an aiming gui
 - **Physical props:** bottles, mugs, a vase, and a frying pan can be grabbed, thrown, or used for melee. Props use lightweight swept collision rather than a full rigid-body physics engine.
 - **Waves:** a mix of rushing and shooting enemies approaches you. Enemy bullets are visible and slow enough to dodge. Furniture provides cover. Waves grow up to 22 enemies.
 - **Three health:** recover one health at the next wave. A downed teammate returns with one health if the other player clears the wave. Both down ends the run.
+- **Changing environments:** waves rotate through The Apartment, Skyline Roof, Last Stop Diner, Glasshouse Garden, Freight Terminal, and After Hours (a city street), then repeat with harder waves. Each has different cover and scenery. Both players move to safe supply stations during the intermission, preserving facing direction and VR height. A brief fade marks the transition.
 - **Resupply:** held guns refill and table supplies refresh between waves. Weapons picked up in the initial lobby stay in your hands when you start.
 - **Pause:** desktop menu, hidden page, or hidden VR session marks that player inactive. Teammates can keep fighting. With no active living players, combat stops.
 - **Disconnect:** held props drop; the room remains while someone is connected. Rooms are held in memory and disappear when empty or when the server restarts. Rejoining creates a new player; there is no account or persistent score system.
@@ -147,7 +148,9 @@ Set `GAME_TEST_URL` to a deployed website URL (including its trailing slash and 
 Files:
 
 - `public/src/main.js` — WebXR and desktop input, networking, UI, audio, rendering loop.
-- `public/src/scene.js` — procedural apartment, props, enemies, teammate, and wrist display.
+- `public/src/scene.js` — apartment, props, enemies, teammate, and wrist display.
+- `public/src/environments.js` — disposable, batched indoor/outdoor scenery.
+- `public/shared/levels.js` — arena layouts, cover, spawns, and supplies shared with the server.
 - `public/shared/world.js` — shared solid geometry and collision math.
 - `server/game.js` — server-owned clock, waves, enemies, damage, and item ownership.
 - `server/index.js` — static files, WebSocket rooms, input limits, and cleanup.

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { createVRControl } from './vr.js';
 import { heldPose, updateTrackedHead, calibrateRig } from './poses.js';
-import { createWorld, makeEnemy, aimEnemyWeapon, makeItem, makeAlly, makeWristHUD, palette, box, textPlane } from './scene.js';
+import { createArena } from './environments.js';
+import { levelForWave } from '../shared/levels.js';
+import { makeEnemy, aimEnemyWeapon, makeItem, makeAlly, makeWristHUD, palette, box, textPlane } from './scene.js';
 import { moveBody, turnAroundHead, distance, clamp } from '../shared/world.js';
 
 const $ = id => document.getElementById(id);
@@ -24,10 +26,14 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 1.65)); renderer.setSize(inner
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
 renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local-floor'); renderer.xr.setFramebufferScaleFactor(0.9);
-const scene = new THREE.Scene(); createWorld(scene);
+const scene = new THREE.Scene(); let arena = createArena(scene);
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 60); camera.position.y = 1.65; camera.rotation.order = 'YXZ';
 const rig = new THREE.Group(); rig.add(camera); scene.add(rig);
 const trackedHead = new THREE.PerspectiveCamera(); rig.add(trackedHead);
+const transitionMaterial = new THREE.MeshBasicMaterial({ color: 0x101919, side: THREE.BackSide, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
+const transitionVeil = new THREE.Mesh(new THREE.SphereGeometry(.2, 16, 8), transitionMaterial);
+transitionVeil.renderOrder = 1000; transitionVeil.visible = false; camera.add(transitionVeil);
+let transitionUntil = 0;
 let trackingReady = false, entryAnchor = null;
 const menuCamera = new THREE.PerspectiveCamera(43, innerWidth / innerHeight, 0.1, 90);
 const menuTarget = new THREE.Vector3(0, 0.4, -0.8);
@@ -95,7 +101,7 @@ function sendPose() {
   rig.updateMatrixWorld(true);
   const head = getPose(renderer.xr.isPresenting ? trackedHead : camera);
   const hands = [handPose(0), handPose(1)];
-  send({ type: 'pose', head, hands });
+  send({ type: 'pose', head, hands, levelRevision: state?.levelRevision });
   return true;
 }
 function endpoint() {
@@ -110,7 +116,7 @@ function connect(action) {
   if (socket && socket.readyState < WebSocket.CLOSING) return;
   let url; try { url = endpoint(); } catch (err) { $('connection-message').textContent = err.message; return; }
   storage.set('still-life-name', $('name').value.trim()); storage.set('still-life-server', $('server-url').value.trim());
-  $('create').disabled = true; $('join').disabled = true; $('connection-message').textContent = 'Connecting to the apartment…';
+  $('create').disabled = true; $('join').disabled = true; $('connection-message').textContent = 'Connecting to your room…';
   const ws = new WebSocket(url); socket = ws;
   connectionTimer = setTimeout(() => { if (!playerId) { ws.close(); $('connection-message').textContent = 'Connection timed out. Check that the multiplayer server is running.'; } }, 10000);
   ws.addEventListener('open', () => ws.send(JSON.stringify({ type: action, name: $('name').value, code: $('room-code').value.trim() })));
@@ -143,7 +149,9 @@ function clearGame() {
 }
 function leave(closeSocket = true) {
   if (renderer.xr.isPresenting) renderer.xr.getSession().end().catch(() => {});
-  playerId = null; state = null; mode = 'menu'; lastPhase = ''; keys.clear(); clearGame();
+  playerId = null; state = null; mode = 'menu';
+  if (arena.id !== levelForWave(1).id) { arena.dispose(); arena = createArena(scene); }
+  transitionUntil = 0; transitionVeil.visible = false; lastPhase = ''; keys.clear(); clearGame();
   if (closeSocket) { socket?.close(); socket = null; }
   document.exitPointerLock?.(); document.body.classList.remove('playing');
   for (const id of ['lobby', 'hud', 'pause']) show(id, false); show('menu', true); showcase.visible = true; vrBanner.visible = false;
@@ -201,8 +209,24 @@ function shatter(position) {
   }
 }
 function receive(next) {
+  const previousRevision = state?.levelRevision;
   state = next;
   const player = me(); if (!player) return;
+  const level = levelForWave(state.levelWave);
+  if (arena.id !== level.id) { arena.dispose(); arena = createArena(scene, level); }
+  if (previousRevision !== undefined && previousRevision !== state.levelRevision) {
+    // Translate the entire rig, preserving physical height and the player's
+    // facing direction; no camera-only offset or controller drift in VR.
+    const view = renderer.xr.isPresenting ? trackedHead : camera;
+    if (!renderer.xr.isPresenting || trackingReady) {
+      const position = view.getWorldPosition(new THREE.Vector3());
+      rig.position.x += player.head.p[0] - position.x; rig.position.z += player.head.p[2] - position.z;
+      rig.updateMatrixWorld(true);
+    } else entryAnchor = [...player.head.p];
+    keys.clear(); xr.forEach(c => { c.history = []; });
+    clearGame(); transitionUntil = performance.now() + 650;
+    announce(`${level.name.toUpperCase()} / GEAR UP`, 3);
+  }
   $('roster').textContent = `${state.players.length}/2 connected · ${state.players.map(p => p.name).join(' + ')}`;
   $('start').firstChild.textContent = state.phase === 'lobby' ? 'START THE WAVES ' : state.phase === 'gameover' ? 'PLAY AGAIN ' : 'RETURN TO THE FIGHT ';
   if (lastPhase !== state.phase) {
@@ -211,8 +235,8 @@ function receive(next) {
   }
   for (const event of state.events) {
     if (event.type === 'shatter') shatter(event.p);
-    if (event.type === 'wave') { announce(`WAVE ${String(event.wave).padStart(2, '0')}`, 2); tone(180, 0.35, 'sine', 0.05, 340); }
-    if (event.type === 'clear') announce('WAVE CLEAR · RESUPPLY', 3);
+    if (event.type === 'wave') { announce(`WAVE ${String(event.wave).padStart(2, '0')} / ${level.name.toUpperCase()}`, 3); tone(180, 0.35, 'sine', 0.05, 340); }
+    if (event.type === 'clear') announce(`WAVE CLEAR / ${level.name.toUpperCase()}`, 3);
     if (event.type === 'shot') { tone(130, 0.095, 'sawtooth', event.player === playerId ? 0.045 : 0.018, 35); }
     if (event.type === 'empty' && event.player === playerId) { tone(90, 0.045, 'square', 0.025); announce('EMPTY · THROW IT', 1.5); }
     if (event.type === 'hurt' && event.player === playerId) {
@@ -329,7 +353,7 @@ function locomotion(dt) {
   view.getWorldDirection(forward); forward.y = 0; forward.normalize(); side.crossVectors(forward, THREE.Object3D.DEFAULT_UP).normalize();
   const delta = forward.clone().multiplyScalar(z * dt * 2.1).addScaledVector(side, x * dt * 2.1);
   view.getWorldPosition(v3);
-  const next = moveBody(v3.toArray(), delta.x, delta.z);
+  const next = moveBody(v3.toArray(), delta.x, delta.z, .23, levelForWave(state?.levelWave));
   rig.position.x += next[0] - v3.x; rig.position.z += next[2] - v3.z;
 }
 function renderEntities(dt, time) {
@@ -377,7 +401,7 @@ function updateHud(time) {
   $('health').textContent = '● '.repeat(player.health) + '○ '.repeat(3 - player.health);
   $('time-fill').style.width = `${state.timeScale * 100}%`; $('speed').textContent = `${String(Math.round(state.timeScale * 100)).padStart(2, '0')}%`;
   const label = player.health <= 0 ? 'DOWNED' : state.phase === 'lobby' ? 'GEAR UP' : state.phase === 'countdown' ? `NEXT WAVE IN ${Math.ceil(state.countdown)}` : state.phase === 'gameover' ? 'RUN ENDED' : `${state.enemies.length} HOSTILES`;
-  $('phase-label').textContent = label;
+  $('phase-label').textContent = `${levelForWave(state.levelWave).name.toUpperCase()} / ${label}`;
   const message = state.phase === 'lobby' ? 'GRAB A GUN / TRIGGER TO START' : state.phase === 'gameover' ? 'TRIGGER TO RESTART' : player.health <= 0 ? 'PARTNER MUST CLEAR WAVE TO REVIVE' : label;
   wrist.update(state, player, ammo, message);
   vrBanner.visible = renderer.xr.isPresenting && ['lobby', 'gameover'].includes(state.phase);
@@ -411,6 +435,8 @@ renderer.setAnimationLoop((time, frame) => {
     // A small horizontal offset reserves the left third for the title.
     menuCamera.setViewOffset(innerWidth, innerHeight, -innerWidth * 0.055, -innerHeight * 0.025, innerWidth, innerHeight);
   }
+  transitionVeil.visible = time < transitionUntil && mode !== 'menu';
+  transitionMaterial.opacity = Math.max(0, (transitionUntil - time) / 650);
   locomotion(dt); rig.updateMatrixWorld(true); renderEntities(dt, time);
   if (playerId && time - lastSend > 33) { sendPose(); lastSend = time; }
   if (playerId && time - lastPing > 3000) { send({ type: 'ping', at: Date.now() }); lastPing = time; }
@@ -419,5 +445,5 @@ renderer.setAnimationLoop((time, frame) => {
 });
 
 // Small read-only diagnostics are useful when checking a real headset or desktop browser.
-window.stillLife = { get state() { return state; }, get playerId() { return playerId; }, get mode() { return mode; }, get lastDisconnect() { return lastDisconnect; }, get vr() { return vrControl?.status; }, get tracking() { return { ready: trackingReady, head: trackingReady ? getPose(trackedHead) : null, hands: trackingReady ? [handPose(0), handPose(1)] : null, rig: rig.position.toArray(), heightMode: $('vr-height').value }; }, get stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, latency }; } };
+window.stillLife = { get state() { return state; }, get playerId() { return playerId; }, get mode() { return mode; }, get lastDisconnect() { return lastDisconnect; }, get vr() { return vrControl?.status; }, get tracking() { return { ready: trackingReady, head: trackingReady ? getPose(trackedHead) : null, hands: trackingReady ? [handPose(0), handPose(1)] : null, rig: rig.position.toArray(), heightMode: $('vr-height').value }; }, get environment() { return { id: arena.id, name: levelForWave(state?.levelWave).name, revision: state?.levelRevision }; }, get stats() { return { geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, latency }; } };
 for (const id of ['name', 'room-code', 'create', 'join']) $(id).disabled = false;

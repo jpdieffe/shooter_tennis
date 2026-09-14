@@ -1,5 +1,6 @@
+import { levelForWave } from '../public/shared/levels.js';
 import { randomUUID } from 'node:crypto';
-import { ARENA, SOLIDS, SPAWNS, clamp, distance, direction, pistolMuzzle, enemyWeaponPose, segmentDistance, segmentBox, moveBody } from '../public/shared/world.js';
+import { clamp, distance, direction, pistolMuzzle, enemyWeaponPose, segmentDistance, segmentBox, moveBody } from '../public/shared/world.js';
 
 const vec = (v, n) => Array.isArray(v) && v.length === n && v.every(x => Number.isFinite(x) && Math.abs(x) < 1000);
 const quat = q => {
@@ -12,8 +13,10 @@ export class Game {
   constructor(code) {
     this.code = code; this.players = new Map(); this.items = []; this.enemies = []; this.bullets = [];
     this.events = []; this.phase = 'lobby'; this.wave = 0; this.kills = 0; this.timeScale = 0.035;
+    this.levelWave = 1; this.levelRevision = 0;
     this.countdown = 0; this.elapsed = 0; this.nextId = 1; this.resetItems();
   }
+  get level() { return levelForWave(this.levelWave); }
   id() { return `${this.nextId++}`; }
   event(type, data = {}) { this.events.push({ id: this.id(), type, ...data }); }
   addPlayer(name = 'Player') {
@@ -31,15 +34,26 @@ export class Game {
   }
   resetItems() {
     this.items = [];
-    for (const side of [-1, 1]) {
-      this.addItem('pistol', [side * 1.2, 1.13, 2.17]);
-      this.addItem('bottle', [side * 1.85, 1.2, 2.1]);
-      this.addItem('mug', [side * 2.3, 1.15, 2.1]);
-    }
-    this.addItem('pan', [-4.6, 1.3, -1.8]);
-    this.addItem('bottle', [-5.2, 1.35, -1.8]);
-    this.addItem('vase', [4.65, 1.1, 0.5]);
+    for (const item of this.level.items) this.addItem(item.kind, item.p);
   }
+  prepareLevel(wave, preserveHeld = true) {
+    this.levelWave = wave; this.levelRevision++;
+    this.enemies = []; this.bullets = [];
+    this.items = preserveHeld ? this.items.filter(i => i.heldBy) : [];
+    for (const p of this.players.values()) {
+      const spawn = this.level.playerSpawns[p.slot];
+      const delta = [spawn[0] - p.head.p[0], 0, spawn[2] - p.head.p[2]];
+      for (const tracked of [p.head, ...p.hands]) tracked.p = tracked.p.map((n, i) => n + delta[i]);
+      p.motion = 0; p.lastShot = this.elapsed; p.lastHit = -10;
+    }
+    for (const item of this.items) {
+      if (item.kind === 'pistol') item.ammo = 8;
+      const hand = this.players.get(item.heldBy).hands[item.hand];
+      item.p = [...hand.p]; item.q = [...hand.q]; item.lastImpact = this.elapsed;
+    }
+    for (const item of this.level.items) this.addItem(item.kind, item.p);
+  }
+
   addItem(kind, p) {
     const item = { id: this.id(), kind, p: [...p], q: [0, 0, 0, 1], v: [0, 0, 0], ammo: kind === 'pistol' ? 8 : 0,
       heldBy: null, hand: null, thrownBy: null, moving: false, lastImpact: -10 };
@@ -47,6 +61,9 @@ export class Game {
   }
   updatePose(id, data, now = this.elapsed) {
     const p = this.players.get(id);
+    // Ignore packets queued in the previous environment during the transition.
+    if (this.levelRevision > 0 && data.levelRevision !== this.levelRevision) return false;
+    const ARENA = this.level.bounds;
     if (!p || !data.head || !vec(data.head.p, 3) || !vec(data.head.q, 4) ||
       !Array.isArray(data.hands) || data.hands.length !== 2 || data.hands.some(h => !h || !vec(h.p, 3) || !vec(h.q, 4))) return false;
     const dt = clamp(now - p.lastPose, 0.016, 0.2);
@@ -99,7 +116,7 @@ export class Game {
   }
   start() {
     if (this.phase !== 'lobby' && this.phase !== 'gameover') return;
-    if (this.phase === 'gameover') this.resetItems();
+    if (this.phase === 'gameover') this.prepareLevel(1, false);
     this.wave = 0; this.kills = 0; this.enemies = []; this.bullets = [];
     for (const p of this.players.values()) { p.health = 3; p.score = 0; p.lastHit = -10; }
     this.phase = 'countdown'; this.countdown = 3; this.event('start');
@@ -107,20 +124,10 @@ export class Game {
   spawnWave() {
     this.wave++; this.phase = 'playing'; this.bullets = [];
     for (const p of this.players.values()) { p.health = Math.min(3, p.health + 1); }
-    // Replenish both stations between waves; preserve anything still in a hand.
-    if (this.wave > 1) {
-      this.items = this.items.filter(i => i.heldBy);
-      for (const i of this.items) if (i.kind === 'pistol') i.ammo = 8;
-      for (const side of [-1, 1]) {
-        this.addItem('pistol', [side * 1.2, 1.13, 2.17]);
-        this.addItem('bottle', [side * 1.85, 1.2, 2.1]);
-        this.addItem('mug', [side * 2.3, 1.15, 2.1]);
-      }
-      this.addItem('pan', [-4.6, 1.3, -1.8]);
-    }
+    if (this.levelWave !== this.wave) this.prepareLevel(this.wave);
     const count = Math.min(4 + this.wave * 2 + (this.players.size - 1) * 2, 22);
     for (let i = 0; i < count; i++) {
-      const spawn = SPAWNS[i % SPAWNS.length];
+      const spawn = this.level.spawns[i % this.level.spawns.length];
       this.enemies.push({ id: this.id(), p: [spawn[0] + (i % 2) * 0.35, 0, spawn[2] + Math.floor(i / 5) * 0.5],
         yaw: 0, health: 1, cooldown: 1.7 + i * 0.4, type: i % 3 === 0 ? 'shooter' : 'rusher' });
     }
@@ -139,6 +146,7 @@ export class Game {
     if (p.health === 0) for (let hand = 0; hand < 2; hand++) this.release(p.id, hand, [0, 0, 0]);
   }
   step(dt) {
+    const ARENA = this.level.bounds;
     dt = clamp(dt, 0, 0.05); this.elapsed += dt;
     const active = [...this.players.values()].filter(p => p.health > 0 && p.active && this.elapsed - p.lastPose < 2);
     const activity = Math.max(0.035, ...active.map(p => this.elapsed - p.lastPose < 0.25 ? p.motion : 0));
@@ -164,7 +172,7 @@ export class Game {
             this.hitEnemy(e, item.thrownBy); item.v = item.v.map(n => n * -0.25);
           }
         }
-        if (SOLIDS.some(s => segmentBox(old, item.p, s, 0.07))) { item.p = old; item.v = [0, 0, 0]; item.moving = false; }
+        if (this.level.solids.some(s => segmentBox(old, item.p, s, 0.07))) { item.p = old; item.v = [0, 0, 0]; item.moving = false; }
         if (item.p[1] < 0.12) { item.p[1] = 0.12; item.v = [0, 0, 0]; item.moving = false; }
         item.p[0] = clamp(item.p[0], ARENA.minX, ARENA.maxX); item.p[2] = clamp(item.p[2], ARENA.minZ, ARENA.maxZ);
       }
@@ -180,17 +188,17 @@ export class Game {
       e.yaw = Math.atan2(dx, dz); e.cooldown -= sim;
       if (d > (e.type === 'shooter' ? 4.2 : 0.75)) {
         const speed = (e.type === 'shooter' ? 0.6 : 0.95 + Math.min(this.wave, 10) * 0.055) * sim;
-        const next = moveBody(e.p, dx / (d || 1) * speed, dz / (d || 1) * speed, 0.26);
+        const next = moveBody(e.p, dx / (d || 1) * speed, dz / (d || 1) * speed, 0.26, this.level);
         // Slide around furniture instead of staying pinned behind it.
         if (distance(next, e.p) < speed * 0.25) {
           const sign = Number(e.id) % 2 ? 1 : -1;
-          e.p = moveBody(e.p, -dz / (d || 1) * speed * sign, dx / (d || 1) * speed * sign, 0.26);
+          e.p = moveBody(e.p, -dz / (d || 1) * speed * sign, dx / (d || 1) * speed * sign, 0.26, this.level);
         } else e.p = next;
       }
       if (e.type === 'shooter') e.aim = [...target.head.p];
       if (e.type === 'shooter' && e.cooldown <= 0 && this.bullets.length < 120) {
         const weapon = enemyWeaponPose(e), origin = pistolMuzzle(weapon), aim = direction(weapon.q);
-        if (!SOLIDS.some(s => segmentBox(origin, target.head.p, s))) {
+        if (!this.level.solids.some(s => segmentBox(origin, target.head.p, s))) {
           this.bullets.push({ id: this.id(), p: origin, v: aim.map(n => n * 5.5), owner: e.id, enemy: true, life: 8 });
           this.event('enemyshot', { p: origin });
         }
@@ -201,7 +209,7 @@ export class Game {
     this.enemies = this.enemies.filter(e => e.health > 0);
     for (const b of this.bullets) {
       const old = [...b.p]; b.p = b.p.map((n, i) => n + b.v[i] * sim); b.life -= sim;
-      if (SOLIDS.some(s => segmentBox(old, b.p, s)) || b.p[1] < 0 || b.p[1] > 4.5 || Math.abs(b.p[0]) > 7.8 || b.p[2] < -7.8 || b.p[2] > 6.8) b.life = 0;
+      if (this.level.solids.some(s => segmentBox(old, b.p, s)) || b.p[1] < 0 || b.p[1] > 4.5 || Math.abs(b.p[0]) > 7.8 || b.p[2] < -7.8 || b.p[2] > 6.8) b.life = 0;
       if (b.life <= 0) continue;
       if (b.enemy) {
         for (const p of active) {
@@ -218,10 +226,10 @@ export class Game {
     this.bullets = this.bullets.filter(b => b.life > 0);
     this.enemies = this.enemies.filter(e => e.health > 0);
     if ([...this.players.values()].every(p => p.health <= 0)) { this.phase = 'gameover'; this.event('gameover'); }
-    else if (!this.enemies.length) { this.phase = 'countdown'; this.countdown = 4; this.event('clear'); }
+    else if (!this.enemies.length) { this.phase = 'countdown'; this.countdown = 4; this.prepareLevel(this.wave + 1); this.event('clear', { level: this.level.name }); }
   }
   snapshot() {
-    return { code: this.code, phase: this.phase, wave: this.wave, kills: this.kills, timeScale: this.timeScale,
+    return { code: this.code, levelId: this.level.id, levelWave: this.levelWave, levelRevision: this.levelRevision, phase: this.phase, wave: this.wave, kills: this.kills, timeScale: this.timeScale,
       countdown: this.countdown, players: [...this.players.values()].map(({ id, slot, name, head, hands, health, score, active }) => ({ id, slot, name, head, hands, health, score, active })),
       items: this.items, enemies: this.enemies, bullets: this.bullets, events: this.events.splice(0) };
   }

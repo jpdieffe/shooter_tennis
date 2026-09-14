@@ -1,3 +1,4 @@
+import { levelForWave } from '../shared/levels.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SOLIDS, PISTOL_MUZZLE, ENEMY_SHOULDER, ENEMY_GUN_REACH, enemyWeaponPose } from '../shared/world.js';
@@ -8,6 +9,7 @@ const edge = new THREE.MeshStandardMaterial({ color: 0xb9bfb0, roughness: 1 });
 const black = new THREE.MeshStandardMaterial({ color: palette.ink, roughness: 0.58, metalness: 0.25 });
 const red = new THREE.MeshStandardMaterial({ color: palette.red, roughness: 0.27, metalness: 0.1, flatShading: true });
 const teal = new THREE.MeshStandardMaterial({ color: palette.teal, roughness: 0.4, flatShading: true });
+export const sharedMaterials = new Set([white, edge, black, red, teal]);
 
 export function box(w, h, d, material, x = 0, y = 0, z = 0) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
@@ -21,7 +23,9 @@ export function textPlane(text, width, color = '#202a29', background = null) {
   const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 128;
   const ctx = canvas.getContext('2d');
   if (background) { ctx.fillStyle = background; ctx.fillRect(0, 0, 1024, 128); }
-  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold 62px monospace'; ctx.fillText(text, 512, 64);
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold 62px monospace';
+  const fontSize = Math.min(62, 62 * 980 / Math.max(1, ctx.measureText(text).width));
+  ctx.font = `bold ${fontSize}px monospace`; ctx.fillText(text, 512, 64);
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace;
   return new THREE.Mesh(new THREE.PlaneGeometry(width, width / 8), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
 }
@@ -153,11 +157,12 @@ export function makeWristHUD() {
   mesh.renderOrder = 100; mesh.position.set(0, 0.13, -0.07); mesh.rotation.x = -Math.PI / 3;
   let last = '';
   return { mesh, update(state, player, ammo, message = '') {
-    const value = `${state.code}|${state.wave}|${player.health}|${Math.round(state.timeScale * 100)}|${ammo}|${message}`;
+    const value = `${state.code}|${state.levelWave}|${state.wave}|${player.health}|${Math.round(state.timeScale * 100)}|${ammo}|${message}`;
     if (last === value) return; last = value;
     ctx.clearRect(0, 0, 768, 384); ctx.fillStyle = '#182522ee'; ctx.fillRect(0, 0, 768, 384);
     ctx.fillStyle = '#83e2cf'; ctx.font = '24px monospace'; ctx.fillText(`STILL LIFE / ${state.code}`, 30, 48);
     ctx.fillStyle = '#ffffff'; ctx.font = 'bold 45px monospace'; ctx.fillText(`WAVE ${String(state.wave).padStart(2, '0')}`, 30, 113);
+    ctx.fillStyle = '#b4c4bb'; ctx.font = '23px monospace'; ctx.fillText(levelForWave(state.levelWave).name.toUpperCase(), 300, 110);
     ctx.fillStyle = '#ff7056'; ctx.font = '42px monospace'; ctx.fillText('● '.repeat(Math.max(0, player.health)) || 'DOWNED', 30, 173);
     ctx.fillStyle = '#ffffff'; ctx.font = '29px monospace'; ctx.fillText(ammo, 30, 228);
     ctx.fillStyle = '#ffffff66'; ctx.fillRect(30, 254, 708, 7); ctx.fillStyle = '#ff7056'; ctx.fillRect(30, 254, 708 * state.timeScale, 7);
