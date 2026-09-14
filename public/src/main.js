@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createVRControl } from './vr.js';
+import { heldPose } from './poses.js';
 import { createWorld, makeEnemy, makeItem, makeAlly, makeWristHUD, palette, box, textPlane } from './scene.js';
 import { moveBody, turnAroundHead, distance, clamp } from '../shared/world.js';
 
@@ -80,12 +81,17 @@ function send(data) { if (socket?.readyState === WebSocket.OPEN) socket.send(JSO
 function me() { return state?.players.find(p => p.id === playerId); }
 function held(hand) { return state?.items.find(i => i.heldBy === playerId && i.hand === hand); }
 function handObject(index) { return renderer.xr.isPresenting ? xr[index].grip : desktopHands[index]; }
+function handPose(index) {
+  const controller = xr[index];
+  const targetRay = renderer.xr.isPresenting && controller.source?.targetRayMode === 'tracked-pointer' && controller.ray.visible ? controller.ray : null;
+  return heldPose(handObject(index), targetRay, held(index)?.kind);
+}
 function getPose(obj) { return { p: obj.getWorldPosition(new THREE.Vector3()).toArray(), q: obj.getWorldQuaternion(new THREE.Quaternion()).toArray() }; }
 function sendPose() {
   if (!playerId || mode === 'menu') return;
   rig.updateMatrixWorld(true);
   const head = getPose(renderer.xr.isPresenting ? renderer.xr.getCamera() : camera);
-  const hands = [getPose(handObject(0)), getPose(handObject(1))];
+  const hands = [handPose(0), handPose(1)];
   send({ type: 'pose', head, hands });
 }
 function endpoint() {
@@ -314,7 +320,7 @@ function renderEntities(dt, time) {
   for (const mesh of items.values()) {
     const data = mesh.userData.net;
     if (data.heldBy === playerId) {
-      handObject(data.hand).getWorldPosition(mesh.position); handObject(data.hand).getWorldQuaternion(mesh.quaternion);
+      const pose = handPose(data.hand); mesh.position.fromArray(pose.p); mesh.quaternion.fromArray(pose.q);
     } else { mesh.position.lerp(v3.fromArray(data.p), alpha); mesh.quaternion.slerp(q4.fromArray(data.q), alpha); }
   }
   for (const mesh of enemies.values()) {
