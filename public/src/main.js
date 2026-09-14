@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createVRControl } from './vr.js';
 import { heldPose, updateTrackedHead, calibrateRig } from './poses.js';
-import { createWorld, makeEnemy, makeItem, makeAlly, makeWristHUD, palette, box, textPlane } from './scene.js';
+import { createWorld, makeEnemy, aimEnemyWeapon, makeItem, makeAlly, makeWristHUD, palette, box, textPlane } from './scene.js';
 import { moveBody, turnAroundHead, distance, clamp } from '../shared/world.js';
 
 const $ = id => document.getElementById(id);
@@ -343,6 +343,7 @@ function renderEntities(dt, time) {
   for (const mesh of enemies.values()) {
     const data = mesh.userData.net; mesh.position.lerp(v3.fromArray(data.p), alpha);
     mesh.quaternion.slerp(q4.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, data.yaw), alpha);
+    aimEnemyWeapon(mesh, data.aim);
     mesh.userData.walk = (mesh.userData.walk || 0) + dt * (state?.timeScale || 0.035) * 5;
     const limbs = mesh.userData.limbs; if (limbs) { limbs[0].rotation.x = Math.sin(mesh.userData.walk) * 0.38; limbs[2].rotation.x = -Math.sin(mesh.userData.walk) * 0.38; }
   }

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ARENA, SOLIDS, SPAWNS, clamp, distance, direction, pistolMuzzle, segmentDistance, segmentBox, moveBody } from '../public/shared/world.js';
+import { ARENA, SOLIDS, SPAWNS, clamp, distance, direction, pistolMuzzle, enemyWeaponPose, segmentDistance, segmentBox, moveBody } from '../public/shared/world.js';
 
 const vec = (v, n) => Array.isArray(v) && v.length === n && v.every(x => Number.isFinite(x) && Math.abs(x) < 1000);
 const quat = q => {
@@ -187,11 +187,11 @@ export class Game {
           e.p = moveBody(e.p, -dz / (d || 1) * speed * sign, dx / (d || 1) * speed * sign, 0.26);
         } else e.p = next;
       }
+      if (e.type === 'shooter') e.aim = [...target.head.p];
       if (e.type === 'shooter' && e.cooldown <= 0 && this.bullets.length < 120) {
-        const origin = [e.p[0], 1.35, e.p[2]];
-        const aim = target.head.p.map((n, i) => n - origin[i]), len = Math.hypot(...aim) || 1;
+        const weapon = enemyWeaponPose(e), origin = pistolMuzzle(weapon), aim = direction(weapon.q);
         if (!SOLIDS.some(s => segmentBox(origin, target.head.p, s))) {
-          this.bullets.push({ id: this.id(), p: origin, v: aim.map(n => n / len * 5.5), owner: e.id, enemy: true, life: 8 });
+          this.bullets.push({ id: this.id(), p: origin, v: aim.map(n => n * 5.5), owner: e.id, enemy: true, life: 8 });
           this.event('enemyshot', { p: origin });
         }
         e.cooldown = Math.max(1.3, 3.2 - this.wave * 0.1);

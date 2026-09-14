@@ -12,6 +12,23 @@ export const SPAWNS = [[-6.5, 0, -6.4], [0, 0, -6.6], [6.5, 0, -6.4], [-6.6, 0, 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const distance = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
 export const PISTOL_MUZZLE = [0, 0.025, -0.244];
+export const ENEMY_SHOULDER = [0.3, 1.38, 0];
+export const ENEMY_GUN_REACH = 0.5;
+export function enemyWeaponPose(enemy) {
+  const yaw = enemy.yaw || 0, c = Math.cos(yaw), s = Math.sin(yaw);
+  const shoulder = [enemy.p[0] + ENEMY_SHOULDER[0] * c, enemy.p[1] + ENEMY_SHOULDER[1], enemy.p[2] - ENEMY_SHOULDER[0] * s];
+  let gunYaw = yaw + Math.PI, pitch = 0;
+  if (enemy.aim) {
+    const delta = enemy.aim.map((n, i) => n - shoulder[i]), length = Math.hypot(...delta);
+    gunYaw = Math.atan2(-delta[0], -delta[2]);
+    // Account for the barrel sitting above the gun origin so the muzzle's
+    // forward axis, rather than a line from the shoulder, meets the target.
+    pitch = Math.atan2(delta[1], Math.hypot(delta[0], delta[2])) - Math.asin(clamp(PISTOL_MUZZLE[1] / (length || 1), -1, 1));
+  }
+  const cy = Math.cos(gunYaw / 2), sy = Math.sin(gunYaw / 2), cp = Math.cos(pitch / 2), sp = Math.sin(pitch / 2);
+  const q = [cy * sp, sy * cp, -sy * sp, cy * cp], forward = direction(q);
+  return { p: shoulder.map((n, i) => n + forward[i] * ENEMY_GUN_REACH), q };
+}
 export function pistolMuzzle(pose) {
   const [x, y, z] = PISTOL_MUZZLE, [qx, qy, qz, qw] = pose.q;
   const tx = 2 * (qy * z - qz * y), ty = 2 * (qz * x - qx * z), tz = 2 * (qx * y - qy * x);

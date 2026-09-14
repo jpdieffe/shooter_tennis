@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { SOLIDS, PISTOL_MUZZLE } from '../shared/world.js';
+import { SOLIDS, PISTOL_MUZZLE, ENEMY_SHOULDER, ENEMY_GUN_REACH, enemyWeaponPose } from '../shared/world.js';
 
 export const palette = { red: 0xe94430, ink: 0x202a29, teal: 0x29bba8, paper: 0xeaece3 };
 const white = new THREE.MeshStandardMaterial({ color: 0xe7e9df, roughness: 0.9 });
@@ -59,11 +59,24 @@ export function makeEnemy(type = 'rusher', ally = false) {
   const limbs = [];
   for (const s of [-1, 1]) {
     const leg = new THREE.Group(); leg.position.set(s * 0.12, 0.72, 0); leg.add(box(0.14, 0.67, 0.16, mat, 0, -0.33)); leg.add(box(0.15, 0.12, 0.27, mat, 0, -0.64, 0.05)); g.add(leg); limbs.push(leg);
-    const arm = new THREE.Group(); arm.position.set(s * 0.3, 1.38, 0); arm.add(box(0.12, 0.51, 0.13, mat, 0, -0.25));
-    arm.rotation.x = type === 'shooter' ? -1.35 : -0.35; arm.rotation.z = s * 0.18; g.add(arm); limbs.push(arm);
-    if (type === 'shooter' && s === 1) { const gun = makeItem('pistol'); gun.position.set(0, -0.5, 0); gun.rotation.x = Math.PI / 2; arm.add(gun); }
+    const arm = new THREE.Group(); arm.position.set(s * ENEMY_SHOULDER[0], ENEMY_SHOULDER[1], ENEMY_SHOULDER[2]);
+    if (type === 'shooter' && s === 1) {
+      arm.add(box(0.12, 0.13, ENEMY_GUN_REACH, mat, 0, 0, -ENEMY_GUN_REACH / 2));
+      const gun = makeItem('pistol'); gun.position.z = -ENEMY_GUN_REACH; arm.add(gun);
+      arm.add(box(0.1, 0.1, 0.1, mat, 0, -0.07, -ENEMY_GUN_REACH + 0.025));
+      arm.rotation.y = Math.PI; g.userData.weaponArm = arm; g.userData.weapon = gun;
+    } else {
+      arm.add(box(0.12, 0.51, 0.13, mat, 0, -0.25));
+      arm.rotation.x = type === 'shooter' ? -1.35 : -0.35; arm.rotation.z = s * 0.18;
+    }
+    g.add(arm); limbs.push(arm);
   }
   g.userData.limbs = limbs; return g;
+}
+export function aimEnemyWeapon(mesh, aim) {
+  if (!mesh.userData.weaponArm) return;
+  const pose = enemyWeaponPose({ p: mesh.position.toArray(), yaw: 2 * Math.atan2(mesh.quaternion.y, mesh.quaternion.w), aim });
+  mesh.userData.weaponArm.quaternion.copy(mesh.quaternion).invert().multiply(new THREE.Quaternion(...pose.q));
 }
 export function makeAlly() {
   const g = new THREE.Group();
